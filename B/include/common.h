@@ -33,15 +33,6 @@
 
 #define MAX_PACKETS 10000
 
-typedef enum protocol_filter {
-    HTTP = 1,
-    HTTPS,
-    ARP,
-    DNS,
-    TCP,
-    UDP,
-} protocol_filter;
-
 extern pcap_if_t *alldevsp;
 extern char errbuf[PCAP_ERRBUF_SIZE+1];
 extern char *selected_name;

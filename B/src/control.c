@@ -4,12 +4,12 @@
 // caller
 void pass_control(int num);
 
-// 1. capture_all handlers
+// info printers
 void l7_info(const u_char *payload, int payload_len);
 void l4_info(int l4_protocol, const u_char *l4_packet, int transport_len);
 void l3_info(int l3_protocol, const u_char *l3_packet);
 void l2_info(int linktype, const u_char *l2_packet);
-void capture_all_callback(
+void capture_callback(
     u_char *linktype_ptr,
     const struct pcap_pkthdr* pkthdr, 
     const u_char *packet
@@ -18,9 +18,10 @@ void capture_all_callback(
 // handlers
 void capture_all();
 void apply_filter();
-void capture_filter();
+void capture_filter(const char *filter_expression);
 void last_session();
 // pcap_t *selected;
+/*-----------------------------------------------------------------------------*/
 
 void
 pass_control(int num)
@@ -461,7 +462,7 @@ l2_info(int linktype, const u_char *l2_packet)
 /*-----------------------------------------------------------------------------*/
 
 void
-capture_all_callback(
+capture_callback(
     u_char *linktype_ptr,
     const struct pcap_pkthdr* pkthdr, 
     const u_char *l2_packet
@@ -488,38 +489,102 @@ capture_all_callback(
 }
 
 void
-capture_all() {
+capture_all()
+{
     pcap_t *selected = pcap_create(selected_name, errbuf);
     if (selected == NULL) {
         printf("pcap_create failed: %s\n", errbuf);
-        exit(1);
+        return;
     }
     pcap_set_snaplen(selected, 16);
     pcap_set_promisc(selected, 1);
     if (pcap_activate(selected) < 0) {
         printf("pcap_activate failed\n");
         pcap_close(selected);
-        exit(1);
+        return;
     }
     int linktype = pcap_datalink(selected);
-    pcap_loop(selected, -1, capture_all_callback, (u_char *)&linktype);
+    pcap_loop(selected, -1, capture_callback, (u_char *)&linktype);
+    pcap_close(selected);
 }
 
+// LLM Generated Code BEGIN
+// This function opens a handle, applies a filter, and starts the capture
 void
-capture_filter(int filter)
+capture_filter(const char *filter_expression)
 {
+    pcap_t *selected;
+    struct bpf_program fp; // compiled filter
 
+    // 1. Open the handle (same as capture_all)
+    selected = pcap_create(selected_name, errbuf);
+    if (selected == NULL) {
+        printf("pcap_create failed: %s\n", errbuf);
+        return;
+    }
+    pcap_set_snaplen(selected, 16);
+    pcap_set_promisc(selected, 1);
+    if (pcap_activate(selected) < 0) {
+        printf("pcap_activate failed\n");
+        pcap_close(selected);
+        return;
+    }
+
+    // 2. Compile the filter string
+    if (pcap_compile(selected, &fp, filter_expression, 1, PCAP_NETMASK_UNKNOWN) == -1)
+    {
+        printf("Couldn't parse filter\n");
+        pcap_close(selected);
+        return;
+    }
+
+    // 3. Apply the compiled filter
+    if (pcap_setfilter(selected, &fp) == -1) {
+        printf("Couldn't install filter\n");
+        pcap_close(selected);
+        pcap_freecode(&fp);
+        return;
+    }
+
+    // 4. Start the capture loop (same as before)
+    int linktype = pcap_datalink(selected);
+    pcap_loop(selected, -1, capture_callback, (u_char *)&linktype);
+
+    // 5. Clean up
+    pcap_freecode(&fp);
+    pcap_close(selected);
 }
 
 void
 apply_filter()
 {
-    printf("Select filter:\n");
-    printf("1. HTTP\n2. HTTPS\n3. DNS\n4. ARP\n5. TCP\n6. UDP\n");
+    int choice;
+    char filter[100]; // Buffer for our filter string
+
+    printf("\nSelect a filter:\n");
+    printf("  1. HTTP\n");
+    printf("  2. HTTPS\n");
+    printf("  3. DNS\n");
+    printf("  4. ARP\n");
+    printf("  5. TCP\n");
+    printf("  6. UDP\n");
     printf("Enter choice: ");
-    //int pass;
-    //int bytes_read = scanf("%d", &pass);
-    // error checking for pass, cchecking for ctrl-c, d, etcetc,
-    
-    // capture_filter(filter)
+    scanf("%d", &choice);
+
+    switch (choice)
+    {
+        case 1: strcpy(filter, "tcp port 80"); break;
+        case 2: strcpy(filter, "tcp port 443"); break;
+        case 3: strcpy(filter, "udp port 53"); break;
+        case 4: strcpy(filter, "arp"); break;
+        case 5: strcpy(filter, "tcp"); break;
+        case 6: strcpy(filter, "udp"); break;
+        default:
+            printf("Invalid choice.\n");
+            return;
+    }
+
+    printf("Starting capture with filter: \"%s\"\n", filter);
+    capture_filter(filter);
 }
+// LLM Generated Code END

@@ -2,7 +2,6 @@
 #define control
 
 #include "../include/common.h"
-#include "../include/session.h"
 
 /* --------------------------------l2 stuff----------------------------------- */
 struct any_header {

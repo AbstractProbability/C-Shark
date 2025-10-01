@@ -1,7 +1,8 @@
 #include "../include/dialog.h"
 
 void
-list_devices() {
+list_devices()
+{
     printf("|| [C-Shark] ||\n");
     printf("---------------\n\n");
     printf("Available Interfaces:\n");
@@ -20,7 +21,8 @@ list_devices() {
 }
 
 void
-ask_device() {
+ask_device()
+{
     printf("Select an interface to sniff (1-%d): ", idx);
     int num;
     scanf("%d", &num); ctrl_d();
@@ -42,7 +44,8 @@ ask_device() {
 }
 
 void
-main_menu() {
+main_menu()
+{
     // make sure this doesnt temrinate on ctrl_c
     while(1) {
         printf("Main Menu:\n");
