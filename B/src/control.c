@@ -1,5 +1,8 @@
 #include "../include/control.h"
 
+/*TODO:
+UPDATE CAPTURE_CALLBACK*/
+
 /*----------------------------------Index--------------------------------------*/
 // caller
 void pass_control(int num);
@@ -21,7 +24,34 @@ void apply_filter();
 void capture_filter(const char *filter_expression);
 void last_session();
 // pcap_t *selected;
+
+// extras
+// LLM Generated Code BEGIN
+void start_new_session();
+void analyze_packet_in_depth(struct CapturedPacket *packet_to_analyze);
+
+pcap_t *selected = NULL;
+
+struct CapturedPacket g_packet_storage[MAX_PACKETS];
+int g_packet_count = 0;
+int g_session_linktype = 0; // To remember the linktype for the whole session
+// LLM Generated Code END
+
 /*-----------------------------------------------------------------------------*/
+
+// Frees all previously stored packets and resets the counter.
+void
+start_new_session()
+{
+    printf("################################################################################################");
+    printf("Clearing previous session data...\n");
+    for (int i = 0; i < g_packet_count; i++) {
+        free(g_packet_storage[i].data); // Free the copied packet data
+        g_packet_storage[i].data = NULL;
+    }
+    g_packet_count = 0;
+    printf("################################################################################################");
+}
 
 void
 pass_control(int num)
@@ -31,11 +61,13 @@ pass_control(int num)
     {
         signal(SIGINT, SIG_DFL);
         if (num == 1) {
+            start_new_session();
             capture_all();
         } else if (num == 2) {
+            start_new_session();
             apply_filter();
         } else if (num == 3) {
-            // last_session();
+            last_session();
         } else if (num == 4) {
             // fclose(stdin);
             ctrl_d2();
@@ -44,6 +76,54 @@ pass_control(int num)
     else
     {
         wait(NULL);
+    }
+}
+
+// Forward declaration for the analysis function
+
+void
+analyze_packet_in_depth(struct CapturedPacket *packet_to_analyze)
+{
+    printf("\n================================================================\n");
+    printf("In-Depth Analysis for Packet ID: %ld\n", (long)(packet_to_analyze - g_packet_storage));
+    printf("================================================================\n");
+
+    // Reuse your existing parsing pipeline, passing the stored linktype and data
+    l2_info(g_session_linktype, packet_to_analyze->data);
+
+    printf("\n--- Full Packet Hex Dump ---\n");
+    // Reuse your l7_info/handle_payload function to print the entire frame
+    // We pass the full captured length from the stored header
+    l7_info(packet_to_analyze->data, packet_to_analyze->header.caplen);
+    printf("================================================================\n");
+}
+
+void
+last_session()
+{
+    if (g_packet_count == 0) {
+        printf("\nError: No sniffing session has been run yet, or no packets were captured.\n");
+        return;
+    }
+
+    printf("\n--- Stored Session Summary ---\n");
+    for (int i = 0; i < g_packet_count; i++) {
+        printf("  Packet ID: %-5d | Timestamp: %-12ld | Length: %d bytes\n",
+               i,
+               g_packet_storage[i].header.ts.tv_sec,
+               g_packet_storage[i].header.len);
+    }
+    printf("--------------------------------\n");
+
+    int selected_id = -1;
+    printf("Enter Packet ID to inspect: ");
+    scanf("%d", &selected_id);
+    ctrl_d();
+
+    if (selected_id >= 0 && selected_id < g_packet_count) {
+        analyze_packet_in_depth(&g_packet_storage[selected_id]);
+    } else {
+        printf("Error: Invalid Packet ID.\n");
     }
 }
 /*-----------------------------------------------------------------------------*/
@@ -209,12 +289,10 @@ l4_info(int l4_protocol, const u_char *l4_packet, int l4_packet_len)
     
     l7_info(l7_packet, l7_packet_len);
 }
-// LLM Generated code end
 /*-----------------------------------------------------------------------------*/
 
 /*-----------------------------------------------------------------------------*/
 /*L3 STUFF*/
-// LLM GENERATED CODE BEGIN, MODIFIED
 
 uint8_t
 handle_ipv4(const u_char *l3_packet, int *payload_offset)
@@ -311,7 +389,8 @@ handle_arp(const u_char *l3_packet)
     return 0; // ARP doesn't have a Layer 4 protocol
 }
 
-void print_l4_protocol(uint8_t protocol)
+void
+print_l4_protocol(uint8_t protocol)
 {
     printf("    (L4) Protocol: ");
     if (protocol == IPPROTO_TCP) {
@@ -460,6 +539,14 @@ l2_info(int linktype, const u_char *l2_packet)
     l3_info(l3_protocol, l3_packet);
 }
 /*-----------------------------------------------------------------------------*/
+u_int u_min(u_int a, u_int b)
+{
+    if (a < b)
+    {
+        return a;
+    }
+    return b;
+}
 
 void
 capture_callback(
@@ -469,6 +556,7 @@ capture_callback(
 )
 {
     ctrl_d();
+    
     printf("----------------------------------------------------------------\n");
     printf("Packet details:\n\
     Packet Number:   %d\n\
@@ -476,36 +564,69 @@ capture_callback(
     Captured_length: %d\n\
     Raw16:           ", packet_counter, pkthdr->ts.tv_sec, pkthdr->caplen);
     
-    for (u_int i = 0; i<pkthdr->caplen; i++) {
+    for (u_int i = 0; i<u_min(pkthdr->caplen, 16); i++) {
         printf("%02x ", l2_packet[i]);
     }
     printf("\n");
-
+    
     int linktype = *(int *)linktype_ptr;
     l2_info(linktype, l2_packet);
     
     printf("----------------------------------------------------------------\n");
     packet_counter++;
+    fflush(stdout);
+
+    // LLM Generated code BEGIN
+    if (g_packet_count < MAX_PACKETS)
+    {
+        // 1. Copy the pcap header
+        g_packet_storage[g_packet_count].header = *pkthdr;
+
+        // 2. Allocate new memory on the heap for the packet data
+        g_packet_storage[g_packet_count].data = malloc(pkthdr->caplen);
+        if (g_packet_storage[g_packet_count].data == NULL) {
+            fprintf(stderr, "Failed to allocate memory for packet storage.\n");
+            return; // Or handle error more gracefully
+        }
+
+        // 3. Copy the packet data into the new memory
+        memcpy(g_packet_storage[g_packet_count].data, l2_packet, pkthdr->caplen);
+
+        // 4. Increment the stored packet counter
+        g_packet_count++;
+    }
+    // LLM Generated Code END
 }
 
 void
 capture_all()
 {
-    pcap_t *selected = pcap_create(selected_name, errbuf);
+    selected = pcap_create(selected_name, errbuf);
     if (selected == NULL) {
         printf("pcap_create failed: %s\n", errbuf);
         return;
     }
-    pcap_set_snaplen(selected, 16);
+    pcap_set_snaplen(selected, 65535);
     pcap_set_promisc(selected, 1);
+    pcap_set_timeout(selected, 1);
     if (pcap_activate(selected) < 0) {
         printf("pcap_activate failed\n");
         pcap_close(selected);
         return;
     }
     int linktype = pcap_datalink(selected);
+    g_session_linktype = linktype; // Store the linktype globally
+
+    // LLM GENERATED CODE BEGIN
+    signal(SIGINT, ctrl_c);
+    // LLM GENERATED CODE END
+
     pcap_loop(selected, -1, capture_callback, (u_char *)&linktype);
     pcap_close(selected);
+    // LLM GENERATED CODE BEGIN
+    signal(SIGINT, SIG_IGN);
+    selected = NULL;
+    // LLM GENERATED CODE END
 }
 
 // LLM Generated Code BEGIN
@@ -513,7 +634,6 @@ capture_all()
 void
 capture_filter(const char *filter_expression)
 {
-    pcap_t *selected;
     struct bpf_program fp; // compiled filter
 
     // 1. Open the handle (same as capture_all)
@@ -522,8 +642,9 @@ capture_filter(const char *filter_expression)
         printf("pcap_create failed: %s\n", errbuf);
         return;
     }
-    pcap_set_snaplen(selected, 16);
+    pcap_set_snaplen(selected, 65535);
     pcap_set_promisc(selected, 1);
+    pcap_set_timeout(selected, 1);
     if (pcap_activate(selected) < 0) {
         printf("pcap_activate failed\n");
         pcap_close(selected);
@@ -548,11 +669,21 @@ capture_filter(const char *filter_expression)
 
     // 4. Start the capture loop (same as before)
     int linktype = pcap_datalink(selected);
+    g_session_linktype = linktype; // Store the linktype globally
+
+    // LLM GENERATED CODE BEGIN
+    signal(SIGINT, ctrl_c);
+    // LLM GENERATED CODE END
+
     pcap_loop(selected, -1, capture_callback, (u_char *)&linktype);
 
     // 5. Clean up
     pcap_freecode(&fp);
     pcap_close(selected);
+    // LLM GENERATED CODE BEGIN
+    signal(SIGINT, SIG_IGN);
+    selected = NULL;
+    // LLM GENERATED CODE END
 }
 
 void

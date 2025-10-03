@@ -64,9 +64,4 @@ typedef struct udphdr udp_hdr;
 // api
 void pass_control(int num);
 
-// entry, exit
-void init_cshark();
-void ctrl_d();
-void ctrl_d2();
-
 #endif

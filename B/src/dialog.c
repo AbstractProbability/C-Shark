@@ -58,18 +58,15 @@ main_menu()
         printf("4. Exit C-Shark\n");
         
         int num = -1;
-        while (1) {
-            printf("Selection: ");
-            //int bytes_read = 
-            scanf("%d", &num);
-            // error checking is not correct acc to scanf maybe switch to getline?
-            ctrl_d();
-            if (num > 4 || num < 1) {
-                printf("Invalid Input.\n");
-            } else {
-                break;
-            }
+        printf("Selection: ");
+        //int bytes_read = 
+        scanf("%d", &num);
+        // error checking is not correct acc to scanf maybe switch to getline?
+        ctrl_d();
+        if (num > 4 || num < 1) {
+            printf("Invalid Input.\n");
+        } else {
+            pass_control(num);
         }
-        pass_control(num);
     }
 }

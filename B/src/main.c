@@ -17,6 +17,16 @@ ctrl_d2() {
     kill(-shark_pgid, SIGQUIT);
 }
 
+// LLM GENERATED CODE BEGIN
+void
+ctrl_c() {
+    printf("\nCapture stopped. Returning to main menu...\n");
+    if (selected != NULL) {
+        pcap_breakloop(selected);
+    }
+}
+// LLM GENERATED CODE END
+
 void
 init_cshark() {
     signal(SIGINT, SIG_IGN);
