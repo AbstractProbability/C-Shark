@@ -38,21 +38,6 @@ int g_session_linktype = 0; // To remember the linktype for the whole session
 // LLM Generated Code END
 
 /*-----------------------------------------------------------------------------*/
-
-// Frees all previously stored packets and resets the counter.
-void
-start_new_session()
-{
-    printf("################################################################################################");
-    printf("Clearing previous session data...\n");
-    for (int i = 0; i < g_packet_count; i++) {
-        free(g_packet_storage[i].data); // Free the copied packet data
-        g_packet_storage[i].data = NULL;
-    }
-    g_packet_count = 0;
-    printf("################################################################################################");
-}
-
 void
 pass_control(int num)
 {
@@ -79,14 +64,28 @@ pass_control(int num)
     }
 }
 
+// LLM GENERATED CODE BEGIN
 // Forward declaration for the analysis function
+
+
+// Frees all previously stored packets and resets the counter.
+void
+start_new_session()
+{
+    printf("Clearing previous session data...\n");
+    for (int i = 0; i < g_packet_count; i++) {
+        free(g_packet_storage[i].data); // Free the copied packet data
+        g_packet_storage[i].data = NULL;
+    }
+    g_packet_count = 0;
+}
 
 void
 analyze_packet_in_depth(struct CapturedPacket *packet_to_analyze)
 {
-    printf("\n================================================================\n");
+    printf("\n--------------------------------------------------------------\n");
     printf("In-Depth Analysis for Packet ID: %ld\n", (long)(packet_to_analyze - g_packet_storage));
-    printf("================================================================\n");
+    printf("----------------------------------------------------------------\n");
 
     // Reuse your existing parsing pipeline, passing the stored linktype and data
     l2_info(g_session_linktype, packet_to_analyze->data);
@@ -95,7 +94,7 @@ analyze_packet_in_depth(struct CapturedPacket *packet_to_analyze)
     // Reuse your l7_info/handle_payload function to print the entire frame
     // We pass the full captured length from the stored header
     l7_info(packet_to_analyze->data, packet_to_analyze->header.caplen);
-    printf("================================================================\n");
+    printf("----------------------------------------------------------------\n");
 }
 
 void
@@ -126,6 +125,7 @@ last_session()
         printf("Error: Invalid Packet ID.\n");
     }
 }
+// LLM GENERATED CODE END
 /*-----------------------------------------------------------------------------*/
 
 /*-----------------------------------------------------------------------------*/
@@ -539,6 +539,7 @@ l2_info(int linktype, const u_char *l2_packet)
     l3_info(l3_protocol, l3_packet);
 }
 /*-----------------------------------------------------------------------------*/
+
 u_int u_min(u_int a, u_int b)
 {
     if (a < b)
