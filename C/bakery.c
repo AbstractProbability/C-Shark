@@ -1,3 +1,4 @@
+/* LLM GENERATED CODE BEGIN */
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -124,47 +125,6 @@ void sitOnSofa(CustomerInfo *customer) {
     sleep(1);
     printf("%ld Customer %d sitOnSofa\n", get_timestamp(), customer->id);
 }
-
-/*
-void getCake(CustomerInfo *customer) {
-    sleep(1);
-
-    pthread_mutex_lock(&g_bakery_mutex);
-    enqueue(&g_bakery.waiting_for_cake_q, customer);
-    customer->state = WAITING_FOR_CAKE;
-    
-    // THE FIX: Wake up ALL sleeping chefs, not just one.
-    pthread_cond_broadcast(&g_bakery.g_work_available_cond);
-    
-    printf("%ld Customer %d getcake\n", get_timestamp(), customer->id);
-    pthread_mutex_unlock(&g_bakery_mutex);
-
-    pthread_mutex_lock(&customer->mutex);
-    while (customer->state != WAITING_TO_PAY) {
-        pthread_cond_wait(&customer->cond, &customer->mutex);
-    }
-    pthread_mutex_unlock(&customer->mutex);
-}
-
-void pay(CustomerInfo *customer) {
-    sleep(1);
-
-    pthread_mutex_lock(&g_bakery_mutex);
-    printf("%ld Customer %d pay\n", get_timestamp(), customer->id);
-    enqueue(&g_bakery.ready_to_pay_q, customer);
-
-    // THE FIX: Wake up ALL sleeping chefs, not just one.
-    pthread_cond_broadcast(&g_bakery.g_work_available_cond);
-
-    pthread_mutex_unlock(&g_bakery_mutex);
-    
-    pthread_mutex_lock(&customer->mutex);
-    while (customer->state != PAID) {
-        pthread_cond_wait(&customer->cond, &customer->mutex);
-    }
-    pthread_mutex_unlock(&customer->mutex);
-}
-    */
 
 void getCake(CustomerInfo *customer) {
     sleep(1);
@@ -310,44 +270,6 @@ void* chef_thread(void* arg) {
     }
     return NULL;
 }
-// ...existing code...
-/*
-void* chef_thread(void* arg) {
-    ChefInfo* chef = (ChefInfo*)arg;
-    CustomerInfo* customer_to_serve = NULL;
-    int is_baking_task;
-    while (1) {
-
-        pthread_mutex_lock(&g_bakery_mutex);
-        // chef idling loop
-        while (g_bakery.ready_to_pay_q.count == 0 && g_bakery.waiting_for_cake_q.count == 0) {
-            if (g_bakery.all_customers_arrived && g_bakery.waiting_for_cake_q.count == 0 && g_bakery.ready_to_pay_q.count == 0) {
-                pthread_mutex_unlock(&g_bakery_mutex);
-                return NULL;
-            }
-            pthread_cond_wait(&g_bakery.g_work_available_cond, &g_bakery_mutex);
-        }
-
-        if (g_bakery.ready_to_pay_q.count > 0) {
-            customer_to_serve = dequeue(&g_bakery.ready_to_pay_q);
-            is_baking_task = 0;
-        } else if (g_bakery.waiting_for_cake_q.count > 0) {
-            customer_to_serve = dequeue(&g_bakery.waiting_for_cake_q);
-            is_baking_task = 1;
-        } else {
-            pthread_mutex_unlock(&g_bakery_mutex);
-            continue;
-        }
-        pthread_mutex_unlock(&g_bakery_mutex);
-        if (is_baking_task) {
-            bakecake(chef, customer_to_serve);
-        } else {
-            acceptPayment(chef, customer_to_serve);
-        }
-    }
-    return NULL;
-}
-    */
 
 // --- Init, Destruct, and Main ---
 void bakeryInit() {
@@ -439,3 +361,4 @@ int main() {
     printf("\nAll customers served. Bakery is closing.\n");
     return 0;
 }
+/* LLM GENERATED CODE END */

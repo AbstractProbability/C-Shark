@@ -1,7 +1,7 @@
 Generate the executable:
-gcc gpt2 -o gpt -lpthread
+gcc bakery -o bakery -lpthread
 
 make an input file named input_file
 In this put the input.
 
-Then ./gpt2
+Then ./bakery
