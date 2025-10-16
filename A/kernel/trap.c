@@ -68,10 +68,22 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if((r_scause() == 15 || r_scause() == 13) &&
+  } else if((r_scause() == 15 || r_scause() == 13) && 
             vmfault(p->pagetable, r_stval(), (r_scause() == 13)? 1 : 0) != 0) {
-    // page fault on lazily-allocated page
+    // pagefault success on heap
+    // 13: read, 15: write
+    printf("[pid %d] PAGEFAULT va=0x%lx access=%s cause=heap\n", p->pid, r_stval(), r_scause() == 13 ? "read" : "write");
   } else {
+    if (r_scause() == 12) {
+      printf("[pid %d] PAGEFAULT va=0x%lx access=read cause=exec\n", p->pid, r_stval());
+      printf("[pid %d] KILL invalid-access va=0x%lx access=read\n", p->pid, r_stval());
+    } else if (r_scause() == 13) { // read
+      printf("[pid %d] PAGEFAULT va=0x%lx access=read cause=invalid\n", p->pid, r_stval());
+      printf("[pid %d] KILL invalid-access va=0x%lx access=read\n", p->pid, r_stval());
+    } else if (r_scause() == 15) { // write
+      printf("[pid %d] PAGEFAULT va=0x%lx access=write cause=invalid\n", p->pid, r_stval());
+      printf("[pid %d] KILL invalid-access va=0x%lx access=write\n", p->pid, r_stval());
+    }
     printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
     printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
     setkilled(p);

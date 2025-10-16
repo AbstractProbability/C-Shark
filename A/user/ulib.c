@@ -149,9 +149,16 @@ memcpy(void *dst, const void *src, uint n)
   return memmove(dst, src, n);
 }
 
+/*
 char *
 sbrk(int n) {
   return sys_sbrk(n, SBRK_EAGER);
+}
+*/
+
+char *
+sbrk(int n) {
+  return sys_sbrk(n, SBRK_LAZY);
 }
 
 char *
