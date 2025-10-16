@@ -1,4 +1,4 @@
-#include "../include/dialog.h"
+#include "./dialog.h"
 
 void
 list_devices()

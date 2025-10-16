@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <ctype.h>
+#include <pthread.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 

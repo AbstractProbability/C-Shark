@@ -1,8 +1,8 @@
 #ifndef dialog
 #define dialog
 
-#include "../include/common.h"
-#include "../include/control.h"
+#include "./common.h"
+#include "./control.h"
 
 void list_devices();
 void ask_device();

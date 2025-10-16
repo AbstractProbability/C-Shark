@@ -1,4 +1,4 @@
-#include "../include/control.h"
+#include "./control.h"
 
 /*TODO:
 UPDATE CAPTURE_CALLBACK*/
@@ -38,6 +38,41 @@ struct CapturedPacket g_packet_storage[MAX_PACKETS];
 int g_packet_count = 0;
 int g_session_linktype = 0; // To remember the linktype for the whole session
 // LLM Generated Code END
+
+/*--------------------Watch stdin for ctrl_d()-------------------*/
+/* LLM GENERATED CODE BEGIN */
+// Add a stdin watcher to detect Ctrl-D (EOF)
+static pthread_t g_stdin_thread;
+static int g_stdin_thread_started = 0;
+
+static void* stdin_eof_watcher(void* arg) {
+    // Block here until EOF (Ctrl-D on an empty line)
+    int ch;
+    while ((ch = getchar()) != EOF) {
+        // ignore any typed characters
+    }
+    // EOF detected: exit whole program
+    ctrl_d2();
+    return NULL;
+}
+
+static void start_stdin_watcher() {
+    if (!g_stdin_thread_started) {
+        if (pthread_create(&g_stdin_thread, NULL, stdin_eof_watcher, NULL) == 0) {
+            g_stdin_thread_started = 1;
+        }
+    }
+}
+
+static void stop_stdin_watcher() {
+    if (g_stdin_thread_started) {
+        pthread_cancel(g_stdin_thread);
+        pthread_join(g_stdin_thread, NULL);
+        g_stdin_thread_started = 0;
+    }
+}
+/* LLM GENERATED CODE END */
+/*--------------------Watch stdin for ctrl_d()-------------------*/
 
 /*-----------------------------------------------------------------------------*/
 void
@@ -655,9 +690,7 @@ capture_callback(
     const struct pcap_pkthdr* pkthdr, 
     const u_char *l2_packet
 )
-{
-    ctrl_d();
-    
+{   
     printf("----------------------------------------------------------------\n");
     printf("Packet details:\n\
     Packet Number:   %d\n\
@@ -722,7 +755,16 @@ capture_all()
     signal(SIGINT, ctrl_c);
     // LLM GENERATED CODE END
 
+    /* LLM GENERATED CODE BEGIN */
+    start_stdin_watcher();
+    /* LLM GENERATED CODE END */
+
     pcap_loop(selected, -1, capture_callback, (u_char *)&linktype);
+
+    /* LLM GENERATED CODE BEGIN*/
+    stop_stdin_watcher();
+    /* LLM GENERATED CODE END */
+
     pcap_close(selected);
     // LLM GENERATED CODE BEGIN
     signal(SIGINT, SIG_IGN);
@@ -776,7 +818,15 @@ capture_filter(const char *filter_expression)
     signal(SIGINT, ctrl_c);
     // LLM GENERATED CODE END
 
+    /* LLM GENERATED CODE BEGIN */
+    start_stdin_watcher();
+    /* LLM GENERATED CODE END */
+
     pcap_loop(selected, -1, capture_callback, (u_char *)&linktype);
+
+    /* LLM GENERATED CODE BEGIN*/
+    stop_stdin_watcher();
+    /* LLM GENERATED CODE END */
 
     // 5. Clean up
     pcap_freecode(&fp);

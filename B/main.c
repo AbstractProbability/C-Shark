@@ -1,4 +1,4 @@
-#include "../include/dialog.h"
+#include "./dialog.h"
 
 char errbuf[PCAP_ERRBUF_SIZE+1];
 pcap_if_t *alldevsp = NULL;

@@ -10,14 +10,14 @@ $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJECTS) -lpcap
 
 # files
-main.o: include/dialog.h src/main.c
-	$(CC) $(CFLAGS) -c src/main.c
+main.o: ./dialog.h ./main.c
+	$(CC) $(CFLAGS) -c ./main.c
 
-dialog.o: include/dialog.h src/dialog.c
-	$(CC) $(CFLAGS) -c src/dialog.c
+dialog.o: ./dialog.h ./dialog.c
+	$(CC) $(CFLAGS) -c ./dialog.c
 
-control.o: include/control.h src/control.c
-	$(CC) $(CFLAGS) -c src/control.c
+control.o: ./control.h ./control.c
+	$(CC) $(CFLAGS) -c ./control.c
 
 .PHONY: clean
 clean:

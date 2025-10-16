@@ -1,7 +1,7 @@
 #ifndef control
 #define control
 
-#include "../include/common.h"
+#include "./common.h"
 
 /* --------------------------------l2 stuff----------------------------------- */
 struct any_header {
