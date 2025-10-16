@@ -7,7 +7,7 @@ OBJECTS = main.o control.o dialog.o
 
 all: $(TARGET)
 $(TARGET): $(OBJECTS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJECTS) -lpcap
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJECTS) -lpcap -pthread
 
 # files
 main.o: ./dialog.h ./main.c
