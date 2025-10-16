@@ -6,6 +6,233 @@ https://g.co/gemini/share/925feff52d0f
 https://g.co/gemini/share/a4963df540ad
 https://g.co/gemini/share/48423d8d406b
 
+/****************************************************************************************************************/
+AbstractProbability: In control.c, last_session should also print l3 and l4 types in its summary. Please do this.
+
+GitHub Copilot: ````c
+// ...existing code...
+void
+last_session()
+{
+    if (g_packet_count == 0) {
+        printf("\nError: No sniffing session has been run yet, or no packets were captured.\n");
+        return;
+    }
+
+    printf("\n--- Stored Session Summary ---\n");
+    for (int i = 0; i < g_packet_count; i++) {
+        // Extract L3 and L4 types for summary
+        int l3_type = -1;
+        int l4_type = -1;
+        char l3_str[16] = "Unknown";
+        char l4_str[16] = "Unknown";
+
+        // L2 header length depends on linktype
+        int l2_header_len = 0;
+        int linktype = g_session_linktype;
+        const u_char *l2_packet = g_packet_storage[i].data;
+
+        if (linktype == DLT_NULL) {
+            lo_header *lo_ptr = (lo_header *)l2_packet;
+            if (ntohl(lo_ptr->protocol_type) == AF_INET) {
+                l3_type = ETHERTYPE_IP;
+                l2_header_len = LO_HDR_LEN;
+            } else if (ntohl(lo_ptr->protocol_type) == AF_INET6) {
+                l3_type = ETHERTYPE_IPV6;
+                l2_header_len = LO_HDR_LEN;
+            }
+        } else if (linktype == DLT_LINUX_SLL) {
+            any_header *any_ptr = (any_header *)l2_packet;
+            l3_type = ntohs(any_ptr->protocol_type);
+            l2_header_len = ANY_HDR_LEN;
+        } else if (linktype == DLT_EN10MB) {
+            ether_header *eth_ptr = (ether_header *)l2_packet;
+            l3_type = ntohs(eth_ptr->ether_type);
+            l2_header_len = ETH_HDR_LEN;
+        }
+
+        // L3 string
+        if (l3_type == ETHERTYPE_IP) {
+            strcpy(l3_str, "IPv4");
+        } else if (l3_type == ETHERTYPE_ARP) {
+            strcpy(l3_str, "ARP");
+        } else if (l3_type == ETHERTYPE_IPV6) {
+            strcpy(l3_str, "IPv6");
+        }
+
+        // L4 type (only for IP/IPV6)
+        if (l3_type == ETHERTYPE_IP) {
+            ipv4_hdr *ip = (ipv4_hdr *)(l2_packet + l2_header_len);
+            l4_type = ip->protocol;
+        } else if (l3_type == ETHERTYPE_IPV6) {
+            ipv6_hdr *ip6 = (ipv6_hdr *)(l2_packet + l2_header_len);
+            l4_type = ip6->ip6_nxt;
+        }
+
+        // L4 string
+        if (l4_type == IPPROTO_TCP) {
+            strcpy(l4_str, "TCP");
+        } else if (l4_type == IPPROTO_UDP) {
+            strcpy(l4_str, "UDP");
+        } else if (l4_type != -1) {
+            snprintf(l4_str, sizeof(l4_str), "%d", l4_type);
+        } else {
+            strcpy(l4_str, "-");
+        }
+
+        printf("  Packet ID: %-5d | Timestamp: %-12ld | Length: %d bytes | L3: %-5s | L4: %-5s\n",
+               i,
+               g_packet_storage[i].header.ts.tv_sec,
+               g_packet_storage[i].header.len,
+               l3_str,
+               l4_str);
+    }
+    printf("--------------------------------\n");
+
+    int selected_id = -1;
+    printf("Enter Packet ID to inspect: ");
+    scanf("%d", &selected_id);
+    ctrl_d();
+
+    if (selected_id >= 0 && selected_id < g_packet_count) {
+        analyze_packet_in_depth(&g_packet_storage[selected_id]);
+    } else {
+        printf("Error: Invalid Packet ID.\n");
+    }
+}
+// ...existing code...
+````
+
+AbstractProbability: Great. In control.c, during packet capture, I need ctrl-d to exit the program. How do I do this?
+
+GitHub Copilot: You can’t “catch” Ctrl-D as a signal; it’s an EOF on stdin. During capture, nothing reads stdin, so feof(stdin) never becomes true. Start a small stdin watcher thread that blocks on getchar() and, on EOF, exits the program (using your existing ctrl_d2()).
+
+Apply these changes:
+
+````c
+// ...existing code...
+#include <pthread.h>
+// ...existing code...
+
+// LLM Generated Code BEGIN
+void start_new_session();
+void analyze_packet_in_depth(struct CapturedPacket *packet_to_analyze);
+
+pcap_t *selected = NULL;
+
+struct CapturedPacket g_packet_storage[MAX_PACKETS];
+int g_packet_count = 0;
+int g_session_linktype = 0; // To remember the linktype for the whole session
+
+// Add a stdin watcher to detect Ctrl-D (EOF)
+static pthread_t g_stdin_thread;
+static int g_stdin_thread_started = 0;
+
+static void* stdin_eof_watcher(void* arg) {
+    // Block here until EOF (Ctrl-D on an empty line)
+    int ch;
+    while ((ch = getchar()) != EOF) {
+        // ignore any typed characters
+    }
+    // EOF detected: exit whole program
+    ctrl_d2();
+    return NULL;
+}
+
+static void start_stdin_watcher() {
+    if (!g_stdin_thread_started) {
+        if (pthread_create(&g_stdin_thread, NULL, stdin_eof_watcher, NULL) == 0) {
+            g_stdin_thread_started = 1;
+        }
+    }
+}
+
+static void stop_stdin_watcher() {
+    if (g_stdin_thread_started) {
+        pthread_cancel(g_stdin_thread);
+        pthread_join(g_stdin_thread, NULL);
+        g_stdin_thread_started = 0;
+    }
+}
+// LLM Generated Code END
+
+// ...existing code...
+void
+capture_all()
+{
+    selected = pcap_create(selected_name, errbuf);
+    if (selected == NULL) {
+        printf("pcap_create failed: %s\n", errbuf);
+        return;
+    }
+    pcap_set_snaplen(selected, 65535);
+    pcap_set_promisc(selected, 1);
+    pcap_set_timeout(selected, 1);
+    if (pcap_activate(selected) < 0) {
+        printf("pcap_activate failed\n");
+        pcap_close(selected);
+        return;
+    }
+    int linktype = pcap_datalink(selected);
+    g_session_linktype = linktype; // Store the linktype globally
+
+    signal(SIGINT, ctrl_c);
+
+    // Start watching stdin for Ctrl-D during capture
+    start_stdin_watcher();
+
+    pcap_loop(selected, -1, capture_callback, (u_char *)&linktype);
+
+    // Stop watcher if we're here (capture ended without exiting process group)
+    stop_stdin_watcher();
+
+    pcap_close(selected);
+    signal(SIGINT, SIG_IGN);
+    selected = NULL;
+}
+// ...existing code...
+
+void
+capture_filter(const char *filter_expression)
+{
+    struct bpf_program fp; // compiled filter
+    // ...existing code...
+
+    int linktype = pcap_datalink(selected);
+    g_session_linktype = linktype;
+
+    signal(SIGINT, ctrl_c);
+
+    // Start watching stdin for Ctrl-D during filtered capture
+    start_stdin_watcher();
+
+    pcap_loop(selected, -1, capture_callback, (u_char *)&linktype);
+
+    // Stop watcher if we're here (capture ended without exiting process group)
+    stop_stdin_watcher();
+
+    pcap_freecode(&fp);
+    pcap_close(selected);
+    signal(SIGINT, SIG_IGN);
+    selected = NULL;
+}
+// ...existing code...
+````
+
+Also link with pthreads:
+
+````make
+// ...existing code...
+CFLAGS = -Wall -Iinclude -std=c99 -D_DEFAULT_SOURCE -Wextra -Werror -Wno-unused-parameter -fno-asm -pthread
+// ...existing code...
+$(TARGET): $(OBJECTS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJECTS) -lpcap -pthread
+// ...existing code...
+````
+
+Now, during packet capture, pressing Ctrl-D (on an empty line) will trigger EOF, the watcher calls ctrl_d2(), and the program exits.
+/****************************************************************************************************************/
+
 C:
 https://g.co/gemini/share/f136362b6afb
 
