@@ -57,12 +57,14 @@ typedef struct {
     CustomerQueue sofa_waiting_q;
     pthread_cond_t g_work_available_cond;
     pthread_cond_t g_sofa_seat_free_cond;
+    int cash_register_busy;
 } SharedBakeryState;
 
 SharedBakeryState g_bakery;
 pthread_mutex_t g_bakery_mutex;
 struct timeval g_start_time;
 ThreadNode* g_customer_thread_list = NULL;
+long g_time_offset = 0;
 
 // --- Utility Functions ---
 void queue_init(CustomerQueue* q) { q->head = 0; q->tail = 0; q->count = 0; }
@@ -85,7 +87,8 @@ CustomerInfo* dequeue(CustomerQueue* q) {
 long get_timestamp() {
     struct timeval now;
     gettimeofday(&now, NULL);
-    return (now.tv_sec - g_start_time.tv_sec);
+    long elapsed = (now.tv_sec - g_start_time.tv_sec);
+    return g_time_offset + elapsed; // add: preserve original arrival times in prints
 }
 
 // --- Customer Action Functions ---
@@ -103,9 +106,10 @@ int enterOfficeBakery(CustomerInfo *customer) {
 
     // enter, sleep
     g_bakery.customers_in_office++;
-    printf("%ld Customer %d enterofficebakery\n", get_timestamp(), customer->id);
     enqueue(&g_bakery.sofa_waiting_q, customer);    // get in the sofa waiting queue.
     pthread_mutex_unlock(&g_bakery_mutex);
+
+    printf("%ld Customer %d enterofficebakery\n", get_timestamp(), customer->id);
     sleep(1);
     return 0;
 }
@@ -122,19 +126,20 @@ void sitOnSofa(CustomerInfo *customer) {
     // sit as soon as sofa seat available
     g_bakery.sofa_seats_occupied++;
     pthread_mutex_unlock(&g_bakery_mutex);
-    sleep(1);
+
     printf("%ld Customer %d sitOnSofa\n", get_timestamp(), customer->id);
+    sleep(1);
 }
 
 void getCake(CustomerInfo *customer) {
+    // queue for cake after sitting
+    printf("%ld Customer %d getcake\n", get_timestamp(), customer->id);
     sleep(1);
 
-    // queue for cake after sitting
     pthread_mutex_lock(&g_bakery_mutex);
     enqueue(&g_bakery.waiting_for_cake_q, customer);
     customer->state = WAITING_FOR_CAKE;
     pthread_cond_signal(&g_bakery.g_work_available_cond);
-    printf("%ld Customer %d getcake\n", get_timestamp(), customer->id);
     pthread_mutex_unlock(&g_bakery_mutex);
 
     // wait till you get cake
@@ -146,11 +151,11 @@ void getCake(CustomerInfo *customer) {
 }
 
 void pay(CustomerInfo *customer) {
-    sleep(1);
-
     // attempt to pay
-    pthread_mutex_lock(&g_bakery_mutex);
     printf("%ld Customer %d pay\n", get_timestamp(), customer->id);
+    sleep(1);
+    
+    pthread_mutex_lock(&g_bakery_mutex);
     enqueue(&g_bakery.ready_to_pay_q, customer);
     pthread_cond_signal(&g_bakery.g_work_available_cond);
     pthread_mutex_unlock(&g_bakery_mutex);
@@ -198,14 +203,15 @@ void* customer_thread(void* arg) {
 // --- Chef Thread Functions ---
 
 void bakecake(ChefInfo* chef, CustomerInfo* customer_to_serve) {
-    printf("%ld Chef %d bakecake for Customer %d\n", get_timestamp(), chef->id, customer_to_serve->id);
-
     // bake the cake
+    printf("%ld Chef %d bakecake for Customer %d\n", get_timestamp(), chef->id, customer_to_serve->id);
     sleep(2);
-    // FIX: A chef is now free. Signal the pool of waiting chefs.
+
+    /*
     pthread_mutex_lock(&g_bakery_mutex);
     pthread_cond_signal(&g_bakery.g_work_available_cond);
     pthread_mutex_unlock(&g_bakery_mutex);
+    */
 
     // grant the cake to customer
     pthread_mutex_lock(&customer_to_serve->mutex);
@@ -215,18 +221,26 @@ void bakecake(ChefInfo* chef, CustomerInfo* customer_to_serve) {
 }
 
 void acceptPayment(ChefInfo* chef, CustomerInfo* customer_to_serve) {
-    printf("%ld Chef %d acceptPayment for Customer %d\n", get_timestamp(), chef->id, customer_to_serve->id);
-
     // accpet the payment
+    printf("%ld Chef %d acceptPayment for Customer %d\n", get_timestamp(), chef->id, customer_to_serve->id);
     sleep(2);
+
+    /*
     pthread_mutex_lock(&g_bakery_mutex);
     pthread_cond_signal(&g_bakery.g_work_available_cond);
     pthread_mutex_unlock(&g_bakery_mutex);
+    */
 
     pthread_mutex_lock(&customer_to_serve->mutex);
     customer_to_serve->state = PAID;
     pthread_cond_signal(&customer_to_serve->cond);
     pthread_mutex_unlock(&customer_to_serve->mutex);
+
+    // RELEASE THE SINGLE CASH REGISTER and wake other chefs
+    pthread_mutex_lock(&g_bakery_mutex);
+    g_bakery.cash_register_busy = 0;
+    pthread_cond_broadcast(&g_bakery.g_work_available_cond);
+    pthread_mutex_unlock(&g_bakery_mutex);
 }
 
 // ...existing code...
@@ -234,8 +248,9 @@ void* chef_thread(void* arg) {
     ChefInfo* chef = (ChefInfo*)arg;
     CustomerInfo* customer_to_serve = NULL;
     int is_baking_task;
-    while (1) {
 
+    while (1) {
+        /*
         pthread_mutex_lock(&g_bakery_mutex);
         // chef idling loop
         while (g_bakery.ready_to_pay_q.count == 0 && g_bakery.waiting_for_cake_q.count == 0) {
@@ -261,7 +276,42 @@ void* chef_thread(void* arg) {
             pthread_mutex_unlock(&g_bakery_mutex);
             continue;
         }
+        */
+
+        pthread_mutex_lock(&g_bakery_mutex);
+        while (1) {
+            // Exit if no more work and no customers inside
+            if (g_bakery.ready_to_pay_q.count == 0 &&
+                g_bakery.waiting_for_cake_q.count == 0) {
+                if (g_bakery.all_customers_arrived && g_bakery.customers_in_office == 0) {
+                    pthread_mutex_unlock(&g_bakery_mutex);
+                    return NULL;
+                }
+                pthread_cond_wait(&g_bakery.g_work_available_cond, &g_bakery_mutex);
+                continue;
+            }
+
+            // Prefer payment if register free
+            if (g_bakery.ready_to_pay_q.count > 0 && g_bakery.cash_register_busy == 0) {
+                customer_to_serve = dequeue(&g_bakery.ready_to_pay_q);
+                is_baking_task = 0;
+                g_bakery.cash_register_busy = 1; // Reserve the only register
+                break;
+            }
+
+            // Otherwise do baking if available
+            if (g_bakery.waiting_for_cake_q.count > 0) {
+                customer_to_serve = dequeue(&g_bakery.waiting_for_cake_q);
+                is_baking_task = 1;
+                break;
+            }
+
+            // Only payments remain but register is busy; wait until freed
+            pthread_cond_wait(&g_bakery.g_work_available_cond, &g_bakery_mutex);
+        }
         pthread_mutex_unlock(&g_bakery_mutex);
+
+
         if (is_baking_task) {
             bakecake(chef, customer_to_serve);
         } else {
@@ -277,6 +327,7 @@ void bakeryInit() {
     g_bakery.customers_in_office = 0;
     g_bakery.sofa_seats_occupied = 0;
     g_bakery.all_customers_arrived = 0;
+    g_bakery.cash_register_busy = 0;
     queue_init(&g_bakery.waiting_for_cake_q);
     queue_init(&g_bakery.ready_to_pay_q);
     queue_init(&g_bakery.sofa_waiting_q);
@@ -314,37 +365,61 @@ int main() {
     char *input_file = "input_file";
     FILE *fptr = fopen(input_file, "r");
 
+    int first_time, first_id;
+    int has_first = (fscanf(fptr, "%d Customer %d", &first_time, &first_id) == 2);
+
     bakeryInit();
+
+    if (has_first) g_time_offset = first_time; else g_time_offset = 0;
+
     ChefInfo chefs[NUM_CHEFS];
     for (int i = 0; i < NUM_CHEFS; ++i) {
         chefs[i].id = i + 1;
         pthread_create(&chefs[i].thread, NULL, chef_thread, &chefs[i]);
     }
-    int time, id;
-    while (fscanf(fptr, "%d Customer %d", &time, &id) == 2) {
-        CustomerInfo* new_customer = (CustomerInfo*)malloc(sizeof(CustomerInfo));
-        new_customer->id = id;
-        new_customer->arrival_time = time;
-        new_customer->state = ARRIVED;
-        pthread_mutex_init(&new_customer->mutex, NULL);
-        pthread_cond_init(&new_customer->cond, NULL);
-        
+    if (has_first) {
+        // Create first customer with zero delay (starts immediately)
+        CustomerInfo* first_customer = (CustomerInfo*)malloc(sizeof(CustomerInfo));
+        first_customer->id = first_id;
+        first_customer->arrival_time = 0; // relative delay = 0
+        first_customer->state = ARRIVED;
+        pthread_mutex_init(&first_customer->mutex, NULL);
+        pthread_cond_init(&first_customer->cond, NULL);
+
         pthread_t thread_id;
-        pthread_create(&thread_id, NULL, customer_thread, new_customer);
-        
-        // Add the new thread to the linked list for later joining.
-        ThreadNode* new_node = (ThreadNode*)malloc(sizeof(ThreadNode));
-        new_node->thread_id = thread_id;
-        new_node->next = g_customer_thread_list;
-        g_customer_thread_list = new_node;
+        pthread_create(&thread_id, NULL, customer_thread, first_customer);
+
+        ThreadNode* node = (ThreadNode*)malloc(sizeof(ThreadNode));
+        node->thread_id = thread_id;
+        node->next = g_customer_thread_list;
+        g_customer_thread_list = node;
+
+        // Create the rest with delay = time - first_time
+        int time, id;
+        while (fscanf(fptr, "%d Customer %d", &time, &id) == 2) {
+            CustomerInfo* new_customer = (CustomerInfo*)malloc(sizeof(CustomerInfo));
+            new_customer->id = id;
+            new_customer->arrival_time = (time - first_time < 0) ? 0 : (time - first_time);
+            new_customer->state = ARRIVED;
+            pthread_mutex_init(&new_customer->mutex, NULL);
+            pthread_cond_init(&new_customer->cond, NULL);
+
+            pthread_t t;
+            pthread_create(&t, NULL, customer_thread, new_customer);
+
+            ThreadNode* n = (ThreadNode*)malloc(sizeof(ThreadNode));
+            n->thread_id = t;
+            n->next = g_customer_thread_list;
+            g_customer_thread_list = n;
+        }
     }
-    printf("scan loop exited\n");
+    fclose(fptr);
     
     // let customers finish
     join_customers();
     
     // no more customers coming, finish remaining jobs
-    sleep(1);
+
     pthread_mutex_lock(&g_bakery_mutex);
     g_bakery.all_customers_arrived = 1;
     pthread_cond_broadcast(&g_bakery.g_work_available_cond);
