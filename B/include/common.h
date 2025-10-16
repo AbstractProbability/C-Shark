@@ -51,6 +51,7 @@ extern struct CapturedPacket g_packet_storage[MAX_PACKETS];
 extern int g_packet_count;
 extern int g_session_linktype; // To remember the linktype for the whole session
 extern pcap_t *selected;
+extern int full_print;
 // LLM Generated Code END
 
 // entry, exit

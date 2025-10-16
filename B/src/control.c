@@ -3,6 +3,8 @@
 /*TODO:
 UPDATE CAPTURE_CALLBACK*/
 
+int full_print = 0;
+
 /*----------------------------------Index--------------------------------------*/
 // caller
 void pass_control(int num);
@@ -88,12 +90,13 @@ analyze_packet_in_depth(struct CapturedPacket *packet_to_analyze)
     printf("----------------------------------------------------------------\n");
 
     // Reuse your existing parsing pipeline, passing the stored linktype and data
+    full_print = 1;
     l2_info(g_session_linktype, packet_to_analyze->data);
 
     printf("\n--- Full Packet Hex Dump ---\n");
-    // Reuse your l7_info/handle_payload function to print the entire frame
-    // We pass the full captured length from the stored header
     l7_info(packet_to_analyze->data, packet_to_analyze->header.caplen);
+    full_print = 0;
+    
     printf("----------------------------------------------------------------\n");
 }
 
@@ -144,11 +147,15 @@ l7_info(const u_char *payload, int payload_len)
         return;
     }
 
-    printf("    Payload (first 64 bytes):\n");
-
-    const int bytes_per_line = 16;
-    int bytes_to_print = (payload_len < 64) ? payload_len : 64;
-
+    int bytes_per_line = 16, bytes_to_print;
+    if (full_print) {
+        printf("    Payload:\n");
+        bytes_to_print = payload_len;
+    } else {
+        printf("    Payload (first 64 bytes):\n");
+        bytes_to_print = (payload_len < 64) ? payload_len : 64;
+    }
+    
     for (int i = 0; i < bytes_to_print; i += bytes_per_line) {
         // Print hex offset
         printf("        %04x: ", i);
