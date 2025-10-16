@@ -16,3 +16,6 @@ kernel/kernel
 user/usys.S
 .gdbinit
 TAGS
+.dir-locals
+.editorconfig
+.gdbinit.tmpl-riscv
