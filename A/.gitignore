@@ -11,11 +11,10 @@ entryother
 initcode
 initcode.out
 kernelmemfs
-mkfs
 kernel/kernel
 user/usys.S
 .gdbinit
 TAGS
-.dir-locals
+.dir-locals.el
 .editorconfig
 .gdbinit.tmpl-riscv
